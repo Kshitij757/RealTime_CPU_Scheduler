@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>CPU Scheduler Unit Tests</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #121824;
+            color: #e2e8f0;
+            padding: 30px;
+            margin: 0;
+        }
+        h1 {
+            color: #06b6d4;
+            border-bottom: 2px solid #1e293b;
+            padding-bottom: 10px;
+        }
+        .test-case {
+            background: #1e293b;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-left: 5px solid #64748b;
+        }
+        .test-case.pass {
+            border-left-color: #10b981;
+        }
+        .test-case.fail {
+            border-left-color: #ef4444;
+        }
+        .title {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .status {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: bold;
+        }
+        .status.pass {
+            color: #10b981;
+        }
+        .status.fail {
+            color: #ef4444;
+        }
+        pre {
+            background: #0f172a;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            color: #a7f3d0;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        .summary {
+            font-size: 1.3rem;
+            font-weight: bold;
+            margin-bottom: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            background: #0f172a;
+            border: 1px solid #1e293b;
+        }
+    </style>
+    <script src="scheduler.js"></script>
+</head>
+<body>
+    <h1>CPU Scheduler Test Suite</h1>
+    <div class="summary" id="summary">Running tests...</div>
+    <div id="results"></div>
+
+    <script>
+        const resultsContainer = document.getElementById('results');
+        let passedCount = 0;
+        let totalCount = 0;
+
+        function assert(condition, message, detail) {
+            totalCount++;
+            const div = document.createElement('div');
+            div.className = `test-case ${condition ? 'pass' : 'fail'}`;
+            
+            let statusText = condition ? 'PASS' : 'FAIL';
+            div.innerHTML = `
+                <div class="title">${message}</div>
+                <div class="status ${condition ? 'pass' : 'fail'}">${statusText}</div>
+                ${detail ? `<pre>${detail}</pre>` : ''}
+            `;
+            resultsContainer.appendChild(div);
+            if (condition) passedCount++;
+        }
+
+        // Test Workload 1: Basic Non-preemptive Interleaved Arrival
+        // P1: arr=0, burst=10
+        // P2: arr=2, burst=2
+        // P3: arr=1, burst=5
+        const workload1 = [
+            { id: "P1", arrival: 0, burst: 10, priority: 3 },
+            { id: "P2", arrival: 2, burst: 2, priority: 1 },
+            { id: "P3", arrival: 1, burst: 5, priority: 2 }
+        ];
+
+        // 1. Test FCFS
+        try {
+            const { results, timeline } = runFCFS(workload1);
+            // Expected order: P1 (0-10), P3 (10-15), P2 (15-17)
+            const p1 = results.find(p => p.id === 'P1');
+            const p2 = results.find(p => p.id === 'P2');
+            const p3 = results.find(p => p.id === 'P3');
+            
+            const match = p1.completion === 10 && p3.completion === 15 && p2.completion === 17;
+            assert(match, "FCFS Correctness Test", `P1 completion: ${p1.completion} (Expected: 10)\nP3 completion: ${p3.completion} (Expected: 15)\nP2 completion: ${p2.completion} (Expected: 17)`);
+        } catch (e) {
+            assert(false, "FCFS Crashed", e.stack);
+        }
+
+        // 2. Test SJF Correctness (Critical bug in previous implementation)
+        try {
+            const { results, timeline } = runSJF(workload1);
+            // Expected order: P1 (0-10), P2 (10-12), P3 (12-17)
+            const p1 = results.find(p => p.id === 'P1');
+            const p2 = results.find(p => p.id === 'P2');
+            const p3 = results.find(p => p.id === 'P3');
+            
+            const match = p1.completion === 10 && p2.completion === 12 && p3.completion === 17;
+            assert(match, "Shortest Job First (SJF) Correctness Test", `P1 completion: ${p1.completion} (Expected: 10)\nP2 completion: ${p2.completion} (Expected: 12)\nP3 completion: ${p3.completion} (Expected: 17)\nTimeline: ${JSON.stringify(timeline)}`);
+        } catch (e) {
+            assert(false, "SJF Crashed", e.stack);
+        }
+
+        // 3. Test SRTF Preemption mid-burst
+        // P1: arr=0, burst=8
+        // P2: arr=2, burst=2
+        // Time 0: P1 starts (remaining=8)
+        // Time 2: P2 arrives (burst=2), P1 remaining=6. Since 2 < 6, P2 preempts P1!
+        // Time 2-4: P2 executes and completes.
+        // Time 4: P1 resumes (remaining=6), completes at 10.
+        const workloadSRTF = [
+            { id: "P1", arrival: 0, burst: 8 },
+            { id: "P2", arrival: 2, burst: 2 }
+        ];
+        try {
+            const { results, timeline } = runSRTF(workloadSRTF);
+            const p1 = results.find(p => p.id === 'P1');
+            const p2 = results.find(p => p.id === 'P2');
+            
+            const matchResults = p2.completion === 4 && p1.completion === 10;
+            const expectedTimeline = [
+                { id: "P1", start: 0, end: 2 },
+                { id: "P2", start: 2, end: 4 },
+                { id: "P1", start: 4, end: 10 }
+            ];
+            const matchTimeline = JSON.stringify(timeline) === JSON.stringify(expectedTimeline);
+            
+            assert(matchResults && matchTimeline, "Shortest Remaining Time First (SRTF) Preemption Test", 
+                `P1 Completion: ${p1.completion} (Expected: 10)\n` +
+                `P2 Completion: ${p2.completion} (Expected: 4)\n` +
+                `Timeline: ${JSON.stringify(timeline)}\n` +
+                `Expected Timeline: ${JSON.stringify(expectedTimeline)}`
+            );
+        } catch(e) {
+            assert(false, "SRTF Crashed", e.stack);
+        }
+
+        // 4. Test Round Robin with Idle and Queue order
+        // P1: arr=0, burst=5, quantum=2
+        // P2: arr=1, burst=3
+        // Time 0: P1 runs.
+        // Time 1: P2 arrives.
+        // Time 2: P1 quantum expires (remaining=3). P2 is in queue. P1 is appended to queue AFTER P2.
+        // Queue order: P2, P1.
+        // Time 2-4: P2 runs (quantum=2, remaining=1).
+        // Time 4-6: P1 runs (quantum=2, remaining=1).
+        // Time 6-7: P2 runs (remaining=0). Completes at 7.
+        // Time 7-8: P1 runs (remaining=0). Completes at 8.
+        const workloadRR = [
+            { id: "P1", arrival: 0, burst: 5 },
+            { id: "P2", arrival: 1, burst: 3 }
+        ];
+        try {
+            const { results, timeline } = runRR(workloadRR, 2);
+            const p1 = results.find(p => p.id === 'P1');
+            const p2 = results.find(p => p.id === 'P2');
+            
+            const match = p2.completion === 7 && p1.completion === 8;
+            assert(match, "Round Robin (RR) Queue Order Test", 
+                `P1 Completion: ${p1.completion} (Expected: 8)\n` +
+                `P2 Completion: ${p2.completion} (Expected: 7)\n` +
+                `Timeline: ${JSON.stringify(timeline)}`
+            );
+        } catch(e) {
+            assert(false, "RR Crashed", e.stack);
+        }
+
+        // 5. Test Priority Non-preemptive Correctness
+        // P1: arr=0, burst=10, priority=3
+        // P2: arr=2, burst=2, priority=1 (highest priority)
+        // P3: arr=1, burst=5, priority=2
+        try {
+            const { results, timeline } = runPriority(workload1);
+            // Expected order: P1 (0-10), P2 (10-12), P3 (12-17)
+            const p1 = results.find(p => p.id === 'P1');
+            const p2 = results.find(p => p.id === 'P2');
+            const p3 = results.find(p => p.id === 'P3');
+            
+            const match = p1.completion === 10 && p2.completion === 12 && p3.completion === 17;
+            assert(match, "Priority Scheduling (Non-preemptive) Correctness Test", 
+                `P1 completion: ${p1.completion} (Expected: 10)\n` +
+                `P2 completion: ${p2.completion} (Expected: 12)\n` +
+                `P3 completion: ${p3.completion} (Expected: 17)\n` +
+                `Timeline: ${JSON.stringify(timeline)}`
+            );
+        } catch (e) {
+            assert(false, "Priority NP Crashed", e.stack);
+        }
+
+        // 6. Test Preemptive Priority Scheduling
+        // P1: arr=0, burst=8, priority=3
+        // P2: arr=2, burst=2, priority=1 (preempts P1!)
+        // Time 0-2: P1 runs (priority=3, remaining=6)
+        // Time 2-4: P2 runs (priority=1, completes at 4)
+        // Time 4-10: P1 runs (completes at 10)
+        const workloadPreemptivePriority = [
+            { id: "P1", arrival: 0, burst: 8, priority: 3 },
+            { id: "P2", arrival: 2, burst: 2, priority: 1 }
+        ];
+        try {
+            const { results, timeline } = runPreemptivePriority(workloadPreemptivePriority);
+            const p1 = results.find(p => p.id === 'P1');
+            const p2 = results.find(p => p.id === 'P2');
+            
+            const match = p1.completion === 10 && p2.completion === 4;
+            assert(match, "Preemptive Priority Scheduling Test", 
+                `P1 Completion: ${p1.completion} (Expected: 10)\n` +
+                `P2 Completion: ${p2.completion} (Expected: 4)\n` +
+                `Timeline: ${JSON.stringify(timeline)}`
+            );
+        } catch(e) {
+            assert(false, "Preemptive Priority Crashed", e.stack);
+        }
+
+        // 7. Test MLFQ (Multi-Level Feedback Queue)
+        // P1: arr=0, burst=6
+        // P2: arr=1, burst=2
+        // Time 0: P1 starts in Q1 (quantum=2).
+        // Time 1: P2 arrives in Q1.
+        // Time 2: P1 quantum expires (ran for 2, remaining=4). P1 is demoted to Q2. P2 (arrived at 1) runs in Q1.
+        // Time 2-4: P2 runs in Q1 (quantum=2, remaining=0). P2 completes at 4.
+        // Time 4: Q1 is empty. Q2 contains P1 (remaining=4). P1 runs in Q2 (quantum=4).
+        // Time 4-8: P1 runs in Q2 and completes at 8.
+        const workloadMLFQ = [
+            { id: "P1", arrival: 0, burst: 6 },
+            { id: "P2", arrival: 1, burst: 2 }
+        ];
+        try {
+            const { results, timeline } = runMLFQ(workloadMLFQ, 2, 4, 0); // Q1 quantum=2, Q2 quantum=4, no aging
+            const p1 = results.find(p => p.id === 'P1');
+            const p2 = results.find(p => p.id === 'P2');
+            
+            const match = p2.completion === 4 && p1.completion === 8;
+            assert(match, "MLFQ Scheduling Correctness Test", 
+                `P1 Completion: ${p1.completion} (Expected: 8)\n` +
+                `P2 Completion: ${p2.completion} (Expected: 4)\n` +
+                `Timeline: ${JSON.stringify(timeline)}`
+            );
+        } catch(e) {
+            assert(false, "MLFQ Crashed", e.stack);
+        }
+
+        // Update summary
+        const summary = document.getElementById('summary');
+        summary.innerHTML = `Tests Completed: ${passedCount}/${totalCount} Passed.`;
+        if (passedCount === totalCount) {
+            summary.style.background = '#065f46';
+            summary.style.borderColor = '#047857';
+            summary.style.color = '#a7f3d0';
+        } else {
+            summary.style.background = '#991b1b';
+            summary.style.borderColor = '#b91c1c';
+            summary.style.color = '#fecaca';
+        }
+    </script>
+</body>
+</html>

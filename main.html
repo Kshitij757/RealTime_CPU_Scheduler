@@ -3,67 +3,259 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Process Visualizer</title>
+    <title>Nexus CPU Scheduler Studio</title>
+    <!-- Modern Typography & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="main.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-    <h2>Real-Time Process Visualizer</h2>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo">
+                <i class="fa-solid fa-microchip pulse-icon"></i>
+                <h1>Nexus<span>CPU</span></h1>
+            </div>
+            <p class="subtitle">Advanced Real-Time CPU Scheduling Simulation & Analysis Studio</p>
+        </header>
 
-    <label>Algorithm:</label>
-    <!-- <select id="algorithm" onchange="toggleInputs()"> -->
-        <option value="FCFS">FCFS</option>
-        <option value="SJF">SJF</option>
-        <option value="RoundRobin">Round Robin</option>
-        <option value="Priority">Priority Scheduling</option>
-    </select>
+        <!-- Main Workspace Grid -->
+        <main class="workspace-grid">
+            
+            <!-- Left Panel: Configuration & Input -->
+            <section class="panel config-panel">
+                <div class="panel-header">
+                    <i class="fa-solid fa-sliders"></i>
+                    <h2>Scheduler Config</h2>
+                </div>
+                
+                <div class="form-group">
+                    <label for="algorithm">Scheduling Algorithm</label>
+                    <select id="algorithm" onchange="handleAlgorithmChange()">
+                        <option value="FCFS">First Come First Served (FCFS)</option>
+                        <option value="SJF">Shortest Job First (SJF) - Non-preemptive</option>
+                        <option value="SRTF">Shortest Remaining Time First (SRTF)</option>
+                        <option value="RoundRobin">Round Robin (RR)</option>
+                        <option value="Priority">Priority Scheduling - Non-preemptive</option>
+                        <option value="PreemptivePriority">Priority Scheduling - Preemptive</option>
+                        <option value="MLFQ">Multi-Level Feedback Queue (MLFQ)</option>
+                    </select>
+                </div>
 
-    <br><br>
+                <!-- Dynamic Algorithm Inputs -->
+                <div id="quantumContainer" class="form-group hidden">
+                    <label for="quantum">Time Quantum</label>
+                    <input type="number" id="quantum" min="1" value="2" placeholder="e.g. 2">
+                </div>
 
-    <!-- Input fields for process details -->
-    <div>
-        <label>Arrival Time:</label> 
-        <input type="number" id="arrival">
+                <div id="mlfqParams" class="hidden">
+                    <div class="form-group">
+                        <label for="q1Quantum">Q1 Quantum (Round Robin)</label>
+                        <input type="number" id="q1Quantum" min="1" value="2">
+                    </div>
+                    <div class="form-group">
+                        <label for="q2Quantum">Q2 Quantum (Round Robin)</label>
+                        <input type="number" id="q2Quantum" min="1" value="4">
+                    </div>
+                    <div class="form-group">
+                        <label for="agingInterval">Aging Interval (Promotion Delay)</label>
+                        <input type="number" id="agingInterval" min="0" value="20" placeholder="0 to disable">
+                    </div>
+                </div>
 
-        <label>Burst Time:</label> 
-        <input type="number" id="burst">
+                <hr class="panel-divider">
 
-        <label id="priorityLabel" class="hidden">Priority:</label> 
-        <input type="number" id="priority" class="hidden">
+                <div class="panel-header">
+                    <i class="fa-solid fa-plus-circle"></i>
+                    <h2>Add Process</h2>
+                </div>
 
-        <label id="quantumLabel" class="hidden">Quantum:</label> 
-        <input type="number" id="quantum" class="hidden">
+                <div class="input-row">
+                    <div class="form-group compact">
+                        <label for="arrival">Arrival Time</label>
+                        <input type="number" id="arrival" min="0" value="0">
+                    </div>
+                    <div class="form-group compact">
+                        <label for="burst">Burst Time</label>
+                        <input type="number" id="burst" min="1" value="5">
+                    </div>
+                </div>
+
+                <div id="priorityContainer" class="form-group hidden">
+                    <label for="priority">Priority <span class="label-hint">(Lower = Higher priority)</span></label>
+                    <input type="number" id="priority" min="0" value="1" placeholder="e.g. 1">
+                </div>
+
+                <div class="btn-group">
+                    <button class="btn btn-primary" onclick="handleAddProcess()">
+                        <i class="fa-solid fa-plus"></i> Add Process
+                    </button>
+                    <button class="btn btn-secondary" onclick="generateRandomProcesses()">
+                        <i class="fa-solid fa-dice"></i> Random
+                    </button>
+                </div>
+
+                <hr class="panel-divider">
+
+                <!-- Mode Selection -->
+                <div class="form-group flex-row">
+                    <input type="checkbox" id="compareMode" onchange="toggleCompareMode()">
+                    <label for="compareMode" class="checkbox-label">
+                        <i class="fa-solid fa-chart-line"></i> Enable Comparison Mode
+                    </label>
+                </div>
+
+                <!-- Comparison Checklist -->
+                <div id="comparisonSelector" class="hidden checkbox-grid">
+                    <h3>Algorithms to Compare</h3>
+                    <label><input type="checkbox" value="FCFS" checked> FCFS</label>
+                    <label><input type="checkbox" value="SJF" checked> SJF</label>
+                    <label><input type="checkbox" value="SRTF" checked> SRTF</label>
+                    <label><input type="checkbox" value="RoundRobin" checked> Round Robin</label>
+                    <label><input type="checkbox" value="Priority"> Priority (NP)</label>
+                    <label><input type="checkbox" value="PreemptivePriority"> Priority (P)</label>
+                    <label><input type="checkbox" value="MLFQ" checked> MLFQ</label>
+                </div>
+            </section>
+
+            <!-- Right Panel: Simulation Dashboard -->
+            <section class="panel display-panel">
+                <!-- Controls bar -->
+                <div class="dashboard-controls" id="dashboardControls">
+                    <div class="simulation-actions">
+                        <button class="btn btn-action" id="btnPlay" onclick="toggleSimulation()" title="Play Simulation">
+                            <i class="fa-solid fa-play"></i> Run
+                        </button>
+                        <button class="btn btn-action" id="btnStep" onclick="stepSimulation()" title="Step 1 Cycle">
+                            <i class="fa-solid fa-forward-step"></i> Step
+                        </button>
+                        <button class="btn btn-action btn-danger" onclick="resetSimulation()" title="Clear and Reset">
+                            <i class="fa-solid fa-rotate-left"></i> Reset
+                        </button>
+                    </div>
+
+                    <div class="speed-control">
+                        <label for="speedSlider">Speed</label>
+                        <input type="range" id="speedSlider" min="1" max="10" value="5">
+                        <span id="speedVal">500ms</span>
+                    </div>
+
+                    <div class="live-clock">
+                        Clock: <span id="clockVal">0</span>
+                    </div>
+                </div>
+
+                <div class="dashboard-controls hidden" id="comparisonControls">
+                    <button class="btn btn-primary btn-large" onclick="runComparisonAnalysis()">
+                        <i class="fa-solid fa-square-poll-vertical"></i> Compare Algorithms
+                    </button>
+                    <button class="btn btn-secondary" onclick="resetSimulation()">
+                        <i class="fa-solid fa-rotate-left"></i> Reset
+                    </button>
+                </div>
+
+                <!-- Visual CPU & Queue Panel -->
+                <div class="live-status-container" id="liveStatusContainer">
+                    <div class="status-card cpu-status">
+                        <h3>CPU Execution State</h3>
+                        <div class="cpu-display" id="cpuDisplay">
+                            <div class="cpu-idle">IDLE</div>
+                        </div>
+                    </div>
+
+                    <div class="status-card queue-status">
+                        <h3>Ready Queue</h3>
+                        <div class="queue-display" id="queueDisplay">
+                            <span class="empty-msg">Queue Empty</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Process Table -->
+                <div class="table-wrapper">
+                    <table class="styled-table" id="processTable">
+                        <thead>
+                            <tr>
+                                <th>Process ID</th>
+                                <th>Arrival</th>
+                                <th>Burst</th>
+                                <th id="thPriority" class="hidden">Priority</th>
+                                <th>Completion</th>
+                                <th>Turnaround</th>
+                                <th>Waiting</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="processTableBody">
+                            <!-- Injected dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="no-processes-state" id="emptyStateMsg">
+                    <i class="fa-solid fa-server"></i>
+                    <p>No processes added yet. Add processes or click <strong>Random</strong> to generate a workload.</p>
+                </div>
+            </section>
+        </main>
+
+        <!-- Bottom Panel: Results, Gantt, Graphs -->
+        <section class="results-container">
+            <!-- Gantt Chart -->
+            <div class="results-panel card">
+                <div class="card-header">
+                    <i class="fa-solid fa-chart-gantt"></i>
+                    <h2>Gantt Chart Timeline</h2>
+                </div>
+                <div class="gantt-scroll">
+                    <div id="ganttChart" class="gantt-chart-container">
+                        <!-- Rendered by script.js -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Metrics grid -->
+            <div class="metrics-grid" id="metricsGrid">
+                <div class="metric-card">
+                    <span class="metric-title">Average Waiting Time</span>
+                    <span class="metric-value" id="metricAWT">-</span>
+                </div>
+                <div class="metric-card">
+                    <span class="metric-title">Average Turnaround Time</span>
+                    <span class="metric-value" id="metricATAT">-</span>
+                </div>
+                <div class="metric-card">
+                    <span class="metric-title">CPU Utilization</span>
+                    <span class="metric-value" id="metricUtil">-</span>
+                </div>
+                <div class="metric-card">
+                    <span class="metric-title">Throughput</span>
+                    <span class="metric-value" id="metricThroughput">-</span>
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="results-panel card">
+                <div class="card-header">
+                    <i class="fa-solid fa-chart-bar"></i>
+                    <h2>Performance Metrics Analytics</h2>
+                </div>
+                <div class="chart-canvas-wrapper">
+                    <canvas id="chart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <p>Designed for OS Concepts shortlisting by SDE candidates. Dynamic timeline simulation runs in $O(N \log N + T)$ complexity.</p>
+        </footer>
     </div>
 
-    <!-- Add Process button on a new line -->
-    <div>
-        <button onclick="addProcess()">Add Process</button>
-    </div>
-
-    <!-- Other buttons -->
-    <div>
-        <button onclick="runScheduler()">Visualize</button>
-        <button onclick="resetProcesses()">Reset</button>
-    </div>
-
-    <h3>Processes</h3>
-    <table id="processTable">
-        <tr>
-            <th>Process ID</th>
-            <th>Arrival Time</th>
-            <th>Burst Time</th>
-            <th>Completion Time</th>
-            <th>Turnaround Time</th>
-            <th>Waiting Time</th>
-        </tr>
-    </table>
-
-    <h3>Gantt Chart</h3>
-    <div id="gantt-chart" class="gantt-chart"></div>
-
-    <h3>Graph Visualization</h3>
-    <canvas id="chart"></canvas>
-
+    <!-- Script imports -->
+    <script src="scheduler.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
